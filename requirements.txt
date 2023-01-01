@@ -1,2 +1,2 @@
-selenium==4.7.2
-dearpygui
+dearpygui~=1.8.0
+selenium~=4.7.2
