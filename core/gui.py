@@ -10,8 +10,10 @@ _LOGGER = logging.getLogger(__name__)
 
 def get_login(bump, gui, u):
     bump.set_login(gui.get_values(u))
+    gui.configure_item("failed login", show=False)
     if bump.login():
         _LOGGER.info("Failed to login\n")
+        gui.configure_item("failed login", show=True)
     else:
         gui.configure_item("login", show=False, no_close=False)
         if bump.check_two_step():
@@ -21,15 +23,20 @@ def get_login(bump, gui, u):
 
 
 def get_two_factor(bump, gui, u):
-    bump.two_factor(gui.get_value(u))
-    gui.configure_item("2fa", show=False)
-    gui.configure_item("details", show=True)
+    gui.configure_item("failed code", show=False)
+    if bump.two_factor(gui.get_value(u)):
+        _LOGGER.info("Invalid 2FA code\n")
+        gui.configure_item("failed code", show=True)
+    else:
+        gui.configure_item("2fa", show=False, no_close=False)
+        gui.configure_item("failed code", show=False)
+        gui.configure_item("details", show=True)
 
 
 def get_details(bump, gui, u):
     bump.set_details(gui.get_values(u))
     gui.configure_item("details", no_close=False)
-    bump.post()
+    bump.post_timer()
 
 
 def launch_GUI():
@@ -77,21 +84,29 @@ def launch_GUI():
                 password = dpg.add_input_text(source="string_value", password=True)
 
             remember_session = dpg.add_checkbox(label="Remember session?", source="bool_value")
-            dpg.add_button(label="Submit", user_data=(url, user, password, remember_session),
-                           callback=lambda s, a, u: get_login(launch_bumper, dpg, u))
 
-    with dpg.window(label="2FA", tag="2fa", width=100, height=50,
-                    no_resize=True, no_close=True, show=False):
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Submit", user_data=(url, user, password, remember_session),
+                               callback=lambda s, a, u: get_login(launch_bumper, dpg, u))
+                dpg.add_text("Failed to login", tag="failed login", color=[255, 0, 0], show=False)
+
+
+
+    with dpg.window(label="2FA", tag="2fa", width=150, height=50,
+                    no_resize=True, no_close=True, show=False, pos=[150, 75]):
         dpg.bind_font(regular_font)
         with dpg.group():
             with dpg.group(horizontal=True):
                 dpg.add_text("2FA")
                 two_factor = dpg.add_input_int(step=0, max_value=999_999, min_value=0, max_clamped=True)
+
+        with dpg.group(horizontal=True):
             dpg.add_button(label="Submit", user_data=two_factor,
                            callback=lambda s, a, u: get_two_factor(launch_bumper, dpg, u))
+            dpg.add_text("Invalid Code", tag="failed code", color=[255, 0, 0], show=False)
 
     with dpg.window(label="Details", tag="details", width=350, height=305,
-                    no_resize=True, no_close=True, show=False):
+                    no_resize=True, no_close=True, show=False, pos=[100, 50]):
         dpg.bind_font(regular_font)
 
         with dpg.group():
