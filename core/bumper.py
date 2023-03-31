@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import logging
 import os
-import asyncio
+import sched, time
 import json
 
 from selenium import webdriver
@@ -16,20 +16,18 @@ _LOGGER = logging.getLogger(__name__)
 
 class Bumper:
     def __init__(self):
-
         self.user = ""
         self.password = ""
         self.forum_link = ""
         self.message = ""
         self.delay = 4
         self.threads = []
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-        self.save_session = False
-        self.save_details = False
+
+        self.loop = sched.scheduler(time.time, time.sleep)
+
         options = webdriver.ChromeOptions()
         options.add_argument(f'user-data-dir={os.getcwd()}/selenium')
-        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
         self.driver = webdriver.Chrome(options=options,
                                        service=webdriver.chrome.service.Service(ChromeDriverManager().install()))
 
@@ -41,21 +39,28 @@ class Bumper:
         self.user = data[0]
         self.password = data[1]
 
+    def update_website(self):
+        self.set_details([', '.join(self.threads), self.message, self.delay])
+
     def set_details(self, data):
         self.threads = data[0].replace(' ', '').split(",")
         self.message = data[1]
         self.delay = data[2]
+        if self.forum_link:
+            data.append(self.forum_link)
         with open('./resources/details.json', 'w') as f:
             json.dump(data, f)
 
     def load_details(self):
-        data = json.load("./resources/details.json")
+        with open('./resources/details.json', 'r') as f:
+            data = json.load(f)
         self.threads = data[0].replace(' ', '').split(",")
         self.message = data[1]
         self.delay = data[2]
-
+        self.forum_link = data[3]
 
     def check_login(self):
+        self.set_website(self.forum_link)
         return len(self.driver.find_elements(By.NAME, value="login")) > 0
 
     def check_two_step(self):
@@ -85,20 +90,20 @@ class Bumper:
         WebDriverWait(self.driver, 2).until(lambda driver: driver.execute_script("return jQuery.active == 0"))
         return len(self.driver.find_elements(By.CLASS_NAME, value="errorOverlay")) > 0
 
-    async def post(self):
-        while True:
-            for thread in self.threads:
-                self.driver.get(f'https://{self.forum_link}/threads/{thread}')
-                self.driver.switch_to.frame(self.driver.find_element(By.TAG_NAME, "iframe"))
-                post = self.driver.find_element(By.TAG_NAME, "body")
-                post.send_keys(self.message)
-                self.driver.switch_to.default_content()
-                self.driver.find_element(By.XPATH, "//input[@class='button primary']").click()
-            await asyncio.sleep(self.delay * 3600)
+    def post(self):
+        _LOGGER.info(f"{len(self.threads)} thread(s) will be bumped...")
+        _LOGGER.info(f"Bumping with the message set as:\"{self.message}\"")
+        _LOGGER.info(f"Your current delay is set to {self.delay} hour(s)")
+        for thread in self.threads:
+            _LOGGER.info(f"Bumping thread ID {thread}")
+            self.driver.get(f'https://{self.forum_link}/threads/{thread}')
+            self.driver.switch_to.frame(self.driver.find_element(By.TAG_NAME, "iframe"))
+            post = self.driver.find_element(By.TAG_NAME, "body")
+            post.send_keys(self.message)
+            self.driver.switch_to.default_content()
+            self.driver.find_element(By.XPATH, "//input[@class='button primary']").click()
 
     def post_timer(self):
-        post = self.loop.create_task(self.post())
-        try:
-            self.loop.run_until_complete(post)
-        except asyncio.CancelledError:
-            pass
+        self.load_details()
+        self.loop.enter(self.delay * 3600, 1, self.post(), ())
+        self.loop.run(False)
