@@ -104,9 +104,6 @@ class Bumper:
             self.driver.switch_to.default_content()
             self.driver.find_element(By.XPATH, "//input[@class='button primary']").click()
 
-    def test(self):
-        print(self.forum_link)
-
     def post_timer(self):
         if self.loop is not None:
             self.loop.stop()

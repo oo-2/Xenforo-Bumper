@@ -5,14 +5,14 @@ class Periodic(object):
     def __init__(self, bumper):
         self.timer = None
         self.bumper = bumper
-        self.delay = bumper.delay * 1
+        self.delay = bumper.delay * 3600
         self.is_running = False
         self.start()
 
     def run(self):
         self.is_running = False
         self.start()
-        self.bumper.test()
+        self.bumper.post()
 
     def start(self):
         if not self.is_running:
