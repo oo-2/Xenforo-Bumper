@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 import logging
 import pickle
+import asyncio
 
 from selenium import webdriver
+from selenium.common import WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service as ChromeService
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +24,8 @@ class Bumper:
         self.message = ""
         self.delay = 4
         self.threads = []
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
         self.save_session = False
         self.save_details = False
 
@@ -58,16 +64,6 @@ class Bumper:
             _LOGGER.error("Failed to fetch cookies")
             return
 
-    def post(self):
-        for thread in self.threads:
-            print(f'https://{self.forum_link}/threads/{thread}')
-            self.driver.get(f'https://{self.forum_link}/threads/{thread}')
-            self.driver.switch_to.frame(self.driver.find_element(By.TAG_NAME, "iframe"))
-            post = self.driver.find_element(By.TAG_NAME, "body")
-            post.send_keys(self.message)
-            self.driver.switch_to.default_content()
-            self.driver.find_element(By.XPATH, "//input[@class='button primary']").click()
-
     def login(self):
         self.driver.get(f'https://{self.forum_link}/login/')
         user = self.driver.find_element(By.NAME, value="login")
@@ -81,7 +77,28 @@ class Bumper:
         return len(self.driver.find_elements(By.NAME, value="code")) > 0
 
     def two_factor(self, code):
+        if len(self.driver.find_elements(By.CLASS_NAME, value="errorOverlay")) > 0:
+            self.driver.refresh()
         two_factor_code = self.driver.find_element(By.NAME, value="code")
         two_factor_code.send_keys(code)
         two_factor_code.send_keys(Keys.ENTER)
-        return len(self.driver.find_elements(By.NAME, value="code")) > 0
+        WebDriverWait(self.driver, 2).until(lambda driver: driver.execute_script("return jQuery.active == 0"))
+        return len(self.driver.find_elements(By.CLASS_NAME, value="errorOverlay")) > 0
+
+    async def post(self):
+        while True:
+            for thread in self.threads:
+                self.driver.get(f'https://{self.forum_link}/threads/{thread}')
+                self.driver.switch_to.frame(self.driver.find_element(By.TAG_NAME, "iframe"))
+                post = self.driver.find_element(By.TAG_NAME, "body")
+                post.send_keys(self.message)
+                self.driver.switch_to.default_content()
+                self.driver.find_element(By.XPATH, "//input[@class='button primary']").click()
+            await asyncio.sleep(self.delay * 3600)
+
+    def post_timer(self):
+        post = self.loop.create_task(self.post())
+        try:
+            self.loop.run_until_complete(post)
+        except asyncio.CancelledError:
+            pass
