@@ -13,7 +13,6 @@ def logged_in(bump, gui):
     gui.delete_item("details data")
     with gui.table_row(tag="details data", parent="bumper info"):
         gui.add_text(bump.forum_link.lower())
-        print(bump.threads)
         gui.add_text(len(bump.threads))
         gui.add_text(f"{bump.delay} hour(s)")
     gui.configure_item("details", no_close=False)
@@ -37,13 +36,7 @@ def log_out(bump, gui):
     gui.configure_item("bump btn", show=False)
 
 
-def update_details(bump, gui, is_website):
-    gui.delete_item("details data")
-    with gui.table_row(tag="details data", parent="bumper info"):
-        gui.add_text(bump.forum_link.lower())
-        gui.add_text(len(bump.threads))
-        gui.add_text(f"{bump.delay} hour(s)")
-
+def update_details(is_website):
     if is_website:
         dpg.configure_item("website", show=True)
     else:
@@ -77,6 +70,7 @@ def get_login(bump, gui, u):
             gui.configure_item("failed login", show=True)
     else:
         gui.configure_item("login", show=False)
+        gui.configure_item("failed login", show=False)
         if bump.check_two_step():
             gui.configure_item("2fa", show=True)
         else:
@@ -90,9 +84,10 @@ def get_duo(bump, gui):
     gui.configure_item("failed duo", show=False)
     if bump.check_duo():
         _LOGGER.info("Failed duo push\n")
-        gui.configure_item("failed code", show=True)
+        gui.configure_item("failed duo", show=True)
     else:
         gui.configure_item("duo", show=False, no_close=False)
+        gui.configure_item("failed duo", show=False)
         if bump.check_two_step():
             gui.configure_item("2fa", show=True)
         else:
@@ -117,7 +112,23 @@ def get_two_factor(bump, gui, u):
 
 
 def get_details(bump, gui, u):
-    bump.set_details(gui.get_values(u))
+    values = gui.get_values(u)
+    if len(values[0]) < 1:
+        gui.configure_item("id err", show=True)
+        return
+    else:
+        gui.configure_item("id err", show=False)
+    if len(values[1]) < 1:
+        gui.configure_item("msg err", show=True)
+        return
+    else:
+        gui.configure_item("msg err", show=False)
+    if values[2] < 1:
+        gui.configure_item("delay err", show=True)
+        return
+    else:
+        gui.configure_item("delay err", show=False)
+    bump.set_details(values)
     gui.configure_item("details", show=False)
     dpg.delete_item("details data")
     logged_in(bump, gui)
@@ -137,9 +148,9 @@ def launch_GUI():
         with dpg.menu_bar(tag="nav", show=False):
             with dpg.menu(label="File"):
                 dpg.add_menu_item(label="Update Details", tag="nav details", show=False,
-                                  callback=lambda: update_details(launch_bumper, dpg, False))
+                                  callback=lambda: update_details(False))
                 dpg.add_menu_item(label="Update Forum Link", tag="nav link", show=False,
-                                  callback=lambda: update_details(launch_bumper, dpg, True))
+                                  callback=lambda: update_details(True))
                 dpg.add_menu_item(label="Log out", tag="nav log", show=False,
                                   callback=lambda: log_out(launch_bumper, dpg))
                 dpg.add_menu_item(label="Exit", callback=lambda: dpg.stop_dearpygui())
@@ -207,15 +218,19 @@ def launch_GUI():
             with dpg.group(horizontal=True):
                 dpg.add_text("Thread IDs")
                 threads = dpg.add_input_text(source="string_value")
+
+            dpg.add_text("You need at least one thread ID", tag="id err", color=[255, 0, 0], show=False)
             dpg.add_text("Separate IDs with commas")
 
             with dpg.group(horizontal=True):
                 dpg.add_text("Message")
                 message = dpg.add_input_text(source="string_value", multiline=True)
+            dpg.add_text("Cannot be empty", tag="msg err", color=[255, 0, 0], show=False)
 
             with dpg.group(horizontal=True):
                 dpg.add_text("Delay (Hours)")
                 timer = dpg.add_input_int(step=0, max_value=24, min_value=1, max_clamped=True)
+            dpg.add_text("Delay must be at least 1 hour", tag="delay err", color=[255, 0, 0], show=False)
             dpg.add_button(label="Submit", user_data=(threads, message, timer),
                            callback=lambda s, a, u: get_details(launch_bumper, dpg, u))
 

@@ -28,6 +28,7 @@ class Bumper:
         options = webdriver.ChromeOptions()
         options.add_argument(f'user-data-dir={os.getcwd()}/selenium')
         options.add_argument("--no-sandbox")
+        options.add_argument('--headless')
         self.driver = webdriver.Chrome(options=options,
                                        service=webdriver.chrome.service.Service(ChromeDriverManager().install()))
 
