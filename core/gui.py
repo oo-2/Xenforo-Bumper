@@ -1,21 +1,52 @@
 #!/usr/bin/env python3
-from pathlib import Path
 import logging
+from pathlib import Path
 
 import dearpygui.dearpygui as dpg
+
 from core import bumper
 
 _LOGGER = logging.getLogger(__name__)
 
 
+def get_website(bump, gui, u):
+    bump.set_website(gui.get_value(u))
+    gui.configure_item("website", show=False)
+    if bump.check_login():
+        gui.configure_item("login", show=True)
+    else:
+        if Path("./resources/details.json").is_file():
+            bump.load_details()
+        else:
+            gui.configure_item("details", show=True)
+
+
 def get_login(bump, gui, u):
     bump.set_login(gui.get_values(u))
     gui.configure_item("failed login", show=False)
+
     if bump.login():
-        _LOGGER.info("Failed to login\n")
-        gui.configure_item("failed login", show=True)
+        if bump.check_duo():
+            gui.configure_item("login", show=False)
+            gui.configure_item("duo", show=True)
+        else:
+            _LOGGER.info("Failed to login\n")
+            gui.configure_item("failed login", show=True)
     else:
-        gui.configure_item("login", show=False, no_close=False)
+        gui.configure_item("login", show=False)
+        if bump.check_two_step():
+            gui.configure_item("2fa", show=True)
+        else:
+            gui.configure_item("details", show=True)
+
+
+def get_duo(bump, gui):
+    gui.configure_item("failed duo", show=False)
+    if bump.check_duo():
+        _LOGGER.info("Failed DUO push\n")
+        gui.configure_item("failed code", show=True)
+    else:
+        gui.configure_item("duo", show=False, no_close=False)
         if bump.check_two_step():
             gui.configure_item("2fa", show=True)
         else:
@@ -51,30 +82,22 @@ def launch_GUI():
         # Acts as the primary window
         with dpg.menu_bar():
             with dpg.menu(label="File"):
-                dpg.add_menu_item(label="Update Login", callback=lambda: dpg.configure_item("login", show=True))
-                dpg.add_menu_item(label="Update Details", callback=lambda: dpg.configure_item("details", show=True))
-                dpg.add_menu_item(label="Forget Login", callback=lambda: Path("./cookies.pkl").unlink(missing_ok=True))
-                dpg.add_menu_item(label="Forget Details",
-                                  callback=lambda: Path("./details.pkl").unlink(missing_ok=True))
                 dpg.add_menu_item(label="Exit", callback=lambda: dpg.stop_dearpygui())
 
-        with dpg.table(header_row=True, row_background=True,
-                       borders_innerH=True, borders_outerH=True, borders_innerV=True,
-                       borders_outerV=True):
-            header = dpg.add_table_column(label="Log Messages")
-            dpg.bind_item_font(header, bold_font)
-            # Dynamically creates rows with updates from the logger
-            with dpg.table_row():
-                dpg.add_text("Receiving Log Updates")
-
-    with dpg.window(label="Login", tag="login", width=250, height=175,
+    with dpg.window(label="Website", tag="website", width=200, height=50,
                     no_resize=True, no_close=True, show=True, pos=[100, 50]):
         dpg.bind_font(regular_font)
         with dpg.group():
             with dpg.group(horizontal=True):
                 dpg.add_text("Forum URL")
                 url = dpg.add_input_text(source="string_value")
+            dpg.add_button(label="Submit", user_data=url,
+                           callback=lambda s, a, u: get_website(launch_bumper, dpg, u))
 
+    with dpg.window(label="Login", tag="login", width=250, height=115,
+                    no_resize=True, no_close=True, show=False, pos=[100, 50]):
+        dpg.bind_font(regular_font)
+        with dpg.group():
             with dpg.group(horizontal=True):
                 dpg.add_text("Forum User")
                 user = dpg.add_input_text(source="string_value")
@@ -83,14 +106,17 @@ def launch_GUI():
                 dpg.add_text("Forum Pass")
                 password = dpg.add_input_text(source="string_value", password=True)
 
-            remember_session = dpg.add_checkbox(label="Remember session?", source="bool_value")
-
             with dpg.group(horizontal=True):
-                dpg.add_button(label="Submit", user_data=(url, user, password, remember_session),
+                dpg.add_button(label="Submit", user_data=(user, password),
                                callback=lambda s, a, u: get_login(launch_bumper, dpg, u))
                 dpg.add_text("Failed to login", tag="failed login", color=[255, 0, 0], show=False)
 
-
+    with dpg.window(label="Duo", tag="duo", width=150, height=30,
+                    no_resize=True, no_close=True, show=False, pos=[150, 75]):
+        dpg.bind_font(regular_font)
+        with dpg.group(horizontal=True):
+            dpg.add_button(label="Approved on DUO", callback=lambda s, a, u: get_duo(launch_bumper, dpg))
+            dpg.add_text("Failed DUO Push", tag="failed duo", color=[255, 0, 0], show=False)
 
     with dpg.window(label="2FA", tag="2fa", width=150, height=50,
                     no_resize=True, no_close=True, show=False, pos=[150, 75]):
@@ -122,9 +148,7 @@ def launch_GUI():
             with dpg.group(horizontal=True):
                 dpg.add_text("Delay (Hours)")
                 timer = dpg.add_input_int(step=0, max_value=24, min_value=1, max_clamped=True)
-
-            remember_details = dpg.add_checkbox(label="Remember details?", source="bool_value")
-            dpg.add_button(label="Submit", user_data=(threads, message, timer, remember_details),
+            dpg.add_button(label="Submit", user_data=(threads, message, timer),
                            callback=lambda s, a, u: get_details(launch_bumper, dpg, u))
 
     dpg.create_viewport(title='Xenforo Bumper', width=600, height=500)
