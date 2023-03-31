@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 import logging
 import os
-import sched, time
 import json
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
+from core import periodic
 
 from webdriver_manager.chrome import ChromeDriverManager
 
@@ -23,7 +23,7 @@ class Bumper:
         self.delay = 4
         self.threads = []
 
-        self.loop = sched.scheduler(time.time, time.sleep)
+        self.loop = None
 
         options = webdriver.ChromeOptions()
         options.add_argument(f'user-data-dir={os.getcwd()}/selenium')
@@ -104,7 +104,12 @@ class Bumper:
             self.driver.switch_to.default_content()
             self.driver.find_element(By.XPATH, "//input[@class='button primary']").click()
 
+    def test(self):
+        print(self.forum_link)
+
     def post_timer(self):
+        if self.loop is not None:
+            self.loop.stop()
         self.load_details()
-        self.loop.enter(self.delay * 3600, 1, self.post(), ())
-        self.loop.run(False)
+        self.post()
+        self.loop = periodic.Periodic(self)
