@@ -10,17 +10,26 @@ _LOGGER = logging.getLogger(__name__)
 
 def get_login(bump, gui, u):
     bump.set_login(gui.get_values(u))
-    gui.configure_item("login", no_close=False)
+    if bump.login():
+        _LOGGER.info("Failed to login\n")
+    else:
+        gui.configure_item("login", show=False, no_close=False)
+        if bump.check_two_step():
+            gui.configure_item("2fa", show=True)
+        else:
+            gui.configure_item("details", show=True)
 
 
 def get_two_factor(bump, gui, u):
-    bump.set_login(gui.get_values(u))
-    gui.configure_item("2fa", no_close=False)
+    bump.two_factor(gui.get_value(u))
+    gui.configure_item("2fa", show=False)
+    gui.configure_item("details", show=True)
 
 
 def get_details(bump, gui, u):
-    bump.set_login(gui.get_values(u))
+    bump.set_details(gui.get_values(u))
     gui.configure_item("details", no_close=False)
+    bump.post()
 
 
 def launch_GUI():
@@ -72,7 +81,7 @@ def launch_GUI():
                            callback=lambda s, a, u: get_login(launch_bumper, dpg, u))
 
     with dpg.window(label="2FA", tag="2fa", width=100, height=50,
-                    no_resize=True, no_close=True, show=True):
+                    no_resize=True, no_close=True, show=False):
         dpg.bind_font(regular_font)
         with dpg.group():
             with dpg.group(horizontal=True):
@@ -82,7 +91,7 @@ def launch_GUI():
                            callback=lambda s, a, u: get_two_factor(launch_bumper, dpg, u))
 
     with dpg.window(label="Details", tag="details", width=350, height=305,
-                    no_resize=True, no_close=True, show=True):
+                    no_resize=True, no_close=True, show=False):
         dpg.bind_font(regular_font)
 
         with dpg.group():
